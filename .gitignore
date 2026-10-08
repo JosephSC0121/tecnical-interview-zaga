@@ -6,3 +6,5 @@ node_modules/
 dist/
 .env
 *.log
+.ruff_cache/
+.DS_Store
