@@ -33,9 +33,11 @@ through the merge again, so the retry cannot overwrite a change that arrived in 
 record cannot be read at all the answer is "unconfirmed", and re-sending the same request is safe:
 it finds nothing left to write and answers "saved".
 
-## What I cut, and why
+## Considered and left out
 
-| Cut | Why |
+The brief asked for none of these. They are ideas I weighed and decided not to build.
+
+| Left out | Why |
 |---|---|
 | Sign-in and identity | The upstream has one shared key and no users; conflicts say "someone else" |
 | Audit history, live presence | Both need state the design deliberately does not have |
