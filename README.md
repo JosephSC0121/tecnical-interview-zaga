@@ -1,66 +1,80 @@
-# Project editor challenge
+# Project editor
 
-We build internal tools for a research team that keeps thousands of infrastructure project records
-accurate. Those records live in an **upstream records API** that another team owns. You cannot change
-it. Your job is the layer in front of it.
+An editing layer in front of an upstream records API that we do not own and cannot change. Two
+people can edit the same project at once: changes to different fields are merged, and a change to
+the same field is shown to whoever saves second, who decides. The original brief for this challenge
+is in the first commit of this repository.
 
-## Start here
+- `upstream/` — the records API, owned by another team. Untouched.
+- `backend/` — FastAPI. The only thing that talks to the upstream.
+- `frontend/` — React + MUI. Talks only to the backend.
 
-1. Click **Use this template** on this repository to create your own copy in your GitHub account.
-   Public or private is your choice; if private, invite `juandiegoantezana-zaga`.
-2. Run the upstream API locally. Instructions, and its known habits, are in
-   [`upstream/README.md`](upstream/README.md). It comes seeded with about 30 fictional projects.
+Why it is built this way is in [DECISIONS.md](DECISIONS.md). How it was built with AI tooling is in
+[ai-trail/](ai-trail/README.md).
 
-## What to build (about an hour, likely less with good tooling)
+## Run it
 
-Use AI the way you would on a real task here, not the way you would for a quick question. We are as
-interested in how you prepared your tooling for the job as in what you asked it to do.
+Needs [uv](https://docs.astral.sh/uv/) and Node.js with pnpm. Three terminals:
 
-| Piece | What it needs to do |
-|---|---|
-| **A backend (Python, FastAPI)** | Sits between the browser and the upstream API. Lists projects, returns one project, saves edits to one project |
-| **A frontend (React + MUI)** | A project list, and an edit form for the project's core fields and its key dates |
-| **Safe concurrent editing** | Two people can edit the same project at the same time. If they change different fields, both changes must survive. If they change the same field, neither may silently win: the person saving second decides. The upstream gives you no help with this. Decide what "the same field" means for the key dates, and say why |
+```sh
+# 1. Upstream. The two variables switch off its random slowness and timeouts.
+cd upstream
+UPSTREAM_SLOW_RATE=0 UPSTREAM_TIMEOUT_RATE=0 uv run upstream          # http://127.0.0.1:8081
 
-One hard rule: **the browser never calls the upstream API directly.** Everything goes through your
-backend.
+# 2. Backend
+cd backend
+cp .env.example .env                                                   # first time only
+uv run --env-file .env uvicorn app.main:create_app --factory --port 8000
 
-**Where this will run.** In production your backend runs as three instances behind a load balancer,
-and a nightly import job writes to the upstream directly, without going through your backend. You do
-not need to build either. Your design does need to survive both.
+# 3. Frontend
+cd frontend
+pnpm install                                                           # first time only
+pnpm dev                                                               # http://localhost:5173
+```
 
-**You will extend this code live in the interview.** Leave it in the state you would want to work in.
+Open http://localhost:5173. To see the concurrency behaviour, open the same project in two windows.
+Restarting the upstream resets its data.
 
-The upstream has some awkward habits. They are in its README. Dealing with them is part of the task.
-Do not modify anything in `upstream/`.
+Drop the two `UPSTREAM_*` variables to get the upstream's real behaviour: about one project load in
+ten takes 2 seconds and about one save in ten times out.
 
-## What we are not asking for
+## Checks
 
-This is deliberately more than fits in the time. What you cut, and why, is part of what we read. We do
-not score UI polish, test coverage percentage, formatting, or how much you produced. Something small
-that works and is honestly described beats something large that is oversold.
+```sh
+cd backend
+uv run pytest                              # 66 tests; no servers needed
+uv run pytest tests/test_merge.py -k rename
+uv run ruff check . && uv run ruff format --check .
+uv run pyright
 
-## What to send back
+cd frontend
+pnpm test                                  # 12 tests
+pnpm lint
+pnpm exec tsc -b
+pnpm build
+```
 
-| Deliverable | Notes |
-|---|---|
-| **The link to your repo** | With everything committed. Replace this README with your own: what runs, what does not, and how to start it |
-| **`DECISIONS.md`** (one page) | What you chose, what you cut and why, and what would break first if this had 50 editors |
-| **Your AI trail** | Whatever your tooling left behind, committed or attached: how you set it up, what you told it, what it produced. Plus a short note: how you approached the task before any code was written, where the tool carried the work, where you overrode it, and what you checked by hand |
+## What runs
 
-Please return it within a week of receiving this brief.
+- **List**: all projects with id, name, sector, country and stage.
+- **Edit**: name, sector, country, stage and key dates (add, change, remove). Linked companies and
+  every other field of the record pass through each save untouched.
+- **Concurrent edits**: different fields are merged; the same field opens a dialog with your value
+  and the stored value, and nothing is written until you choose. A key date is a field of its own,
+  identified by its label. This holds across backend instances and when the other change was
+  written straight to the upstream.
+- **Timeouts**: a save that times out is checked against the record and retried once. It ends as
+  saved, not saved, or "could not confirm", and what the screen says matches what is stored.
 
-## The interview
+## What does not
 
-We use the same codebase, running on your machine, with you sharing your screen. The first part is a
-walkthrough of your decisions and of how you work with AI. In the second part we extend the code
-together, live.
-
-**Come with the environment you actually work in**, configured the way you like it, including anything
-you have added to your AI tooling over time. Requirements will change during the session, and we want
-you to respond the way you would at work, with whatever you would normally reach for. Nothing is off
-limits. We want to see how you really work.
-
----
+- **Two saves that overlap within a few milliseconds** on the same project can still lose one
+  update without anyone being told. The upstream has no conditional write, so this cannot be closed
+  from here. See DECISIONS.md.
+- **No sign-in.** A conflict says "someone else", not who.
+- **No history, no live presence**, no search or paging in the list.
+- **The "not saved" and "could not confirm" messages in the UI** are covered by backend tests and by
+  a scripted run against a flaky upstream, but I have not seen them in the browser.
+- **The frontend has tests only for its pure logic** (`src/edit.ts`). Components are not tested.
 
 All projects, companies and places in this repository are fictional.
